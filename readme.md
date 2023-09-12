@@ -1,7 +1,7 @@
 # Bunzer - the fastest javascript server
 
 
-20x faster than Express based on [this benchmark](https://github.com/SaltyAom/bun-http-framework-benchmark/tree/c7e26fe3f1bfee7ffbd721dbade10ad72a0a14ab#results)
+25x faster than Express based on [this benchmark](https://github.com/SaltyAom/bun-http-framework-benchmark/tree/c7e26fe3f1bfee7ffbd721dbade10ad72a0a14ab)
 
 
 |  Framework       | Average |  Get (/)    |  Params, query & header | Post JSON  |
