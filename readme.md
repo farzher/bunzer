@@ -46,7 +46,7 @@ get('/setheaders',  req => response(`brrrr`, {headers: {'X-Powered-By': 'bunzer'
 get('/getheaders',  req => req.headers['user-agent'])
 get('/ip',          req => req.ip)
 get('/query',       req => req.query.limit) // /query?limit=10
-get('/async', async req => (await fetch('https://example.com').text()))
+get('/async', async req => (await fetch('https://example.com')).text())
 
 post('/body', req => {
   const {username, message} = JSON.parse(req.body)
