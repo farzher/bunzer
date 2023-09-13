@@ -1,6 +1,6 @@
 
 // start the server listening on a port
-export function serve({hostname='localhost', port=8080, public_folder=undefined}={}) {
+export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={}) {
   Bun.listen({hostname, port, socket: {
 
     // message chunk received from the client
