@@ -25,19 +25,18 @@ export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={
       // routing. match the path to its handler function
       const handler = router_find(req)
       if(handler) {
+        // this is a wet mess because async/await and Promise.resolve is too slow
         const response = handler(req)
         if(!response) return send_200(socket)
         if(is_response(response)) return send_userresponse(socket, response)
         if(is_promise(response)) {
-          return response.then(response => is_response(response)
-                                           ? send_userresponse(socket, response)
-                                           : (is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response))
-          )
-          .catch(e => {log(e); send_500(socket)})
+          return response.then(response => {
+              if(!response) return send_200(socket)
+              if(is_response(response)) return send_userresponse(socket, response)
+              return is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response)
+            }).catch(e => {log(e); send_500(socket)})
         }
-        // if(is_promise(response)) return response.then(r => is_response(r) ? send_userresponse(socket, r) : send_fast(socket, r)).catch(e => {log(e); send_500(socket)})
-        return (is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response))
-        // return send_fast(socket, response)
+        return is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response)
       }
 
       // no handler exists for this route, try to serve this path as a file from the public folder
