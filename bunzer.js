@@ -1,7 +1,7 @@
 
 // start the server listening on a port
 export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={}) {
-  Bun.listen({hostname, port, socket: {
+  return Bun.listen({hostname, port, socket: {
 
     // message chunk received from the client
     data(socket, data) {
@@ -33,10 +33,12 @@ export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={
           return response.then(response => {
               if(!response) return send_200(socket)
               if(is_response(response)) return send_userresponse(socket, response)
-              return is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response)
+              if(is_obj(response)) return send_fast_json(socket, response)
+              return send_fast_text(socket, response.toString())
             }).catch(e => {log(e); send_500(socket)})
         }
-        return is_obj(response) ? send_fast_json(socket, response) : send_fast_text(socket, response)
+        if(is_obj(response)) return send_fast_json(socket, response)
+        return send_fast_text(socket, response.toString())
       }
 
       // no handler exists for this route, try to serve this path as a file from the public folder
