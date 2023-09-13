@@ -1,6 +1,6 @@
 
 // start the server listening on a port
-export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={}) {
+export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}={}) {
   return Bun.listen({hostname, port, socket: {
 
     // message chunk received from the client
@@ -44,18 +44,15 @@ export function serve({hostname='0.0.0.0', port=8080, public_folder=undefined}={
       // no handler exists for this route, try to serve this path as a file from the public folder
       if(public_folder) {
         if(req.path[req.path.length-1] === '/') req.path += 'index.html'
-        return send_file(socket, `${public_folder}/${req.path}`)
+        return send_file(socket, `${public_folder}${req.path}`)
       }
 
       return send_404(socket)
     },
 
-    error(socket, error) {
-      log('i caught an error')
-      log(error)
-      send_500(socket)
-    }, },
-  })
+    error(socket, error) { send_500(socket); console.error(error) },
+
+  }})
 }
 
 
@@ -193,12 +190,29 @@ function send(socket, content, {status=200, content_type='text/plain', headers}=
   socket.write(response); socket.flush()
 }
 
-// this is slow. bun does not support quick sendfile... yet? (v1.0)
-async function send_file(socket, filepath) {
-  try {
-    const file = Bun.file(filepath)
-    const file_content = await file.text()
+// // send_file is slow. bun does not support quick sendfile... yet? (v1.0)
+// async function send_file(socket, filepath) {
+//   try {
+//     const file = Bun.file(filepath)
+//     const file_content = await file.text()
 
+//     send(socket, file_content, {
+//       content_type: file.type,
+//       headers: {
+//         'Referrer-Policy': 'no-referrer',
+//         'Cache-Control': 'public,max-age=604800,immutable',
+//       }
+//     })
+//   } catch(e) {send_404(socket)}
+// }
+
+// using fs instead of Bun.file because Bun.file doesn't work https://github.com/oven-sh/bun/issues/1446
+import fs from 'fs'
+function send_file(socket, filepath) {
+  fs.readFile(filepath, (err, file_content) => {
+    if(err) return send_404(socket)
+
+    const file = Bun.file(filepath)
     send(socket, file_content, {
       content_type: file.type,
       headers: {
@@ -206,7 +220,7 @@ async function send_file(socket, filepath) {
         'Cache-Control': 'public,max-age=604800,immutable',
       }
     })
-  } catch(e) {send_404(socket)}
+  })
 }
 
 
