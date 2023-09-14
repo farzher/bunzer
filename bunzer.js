@@ -11,16 +11,26 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       const req = new_request()
       req.socket = socket
 
+
       // parse the first line of the http request
       // parsing a raw http request in javascript is very slow and dumb but i don't know a faster alternative
-      req.raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
-      let cursor = req.raw_http_request.indexOf('\r\n')
-      const line0 = req.raw_http_request.slice(0, cursor)
-      cursor += 2
-      req.start_of_headers = cursor
-      const first_space = line0.indexOf(' ')
-      req.method = line0.slice(0, first_space)
-      req.path = line0.slice(first_space+1, line0.indexOf(' ', first_space+1))
+      const raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
+      const raw_http_len = raw_http_request.length
+      req.raw_http_request = raw_http_request
+
+      let first_space = 0
+      for(let i=0; i<raw_http_len; i++) {
+        if(raw_http_request.charCodeAt(i) === 32/* */) {first_space = i; break }
+      }
+
+      let second_space = 0
+      for(let i=first_space+2; i<raw_http_len; i++) {
+        if(raw_http_request.charCodeAt(i) === 32/* */) {second_space = i; break }
+      }
+
+      req.method = raw_http_request.slice(0, first_space)
+      req.path = raw_http_request.slice(first_space+1, second_space)
+
 
       // routing. match the path to its handler function
       const handler = router_find(req)
@@ -35,20 +45,30 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
               if(is_response(response)) return send_userresponse(socket, response)
               if(is_obj(response)) return send_fast_json(socket, response)
               return send_fast_text(socket, response.toString())
-            }).catch(e => {log(e); send_500(socket)})
+            }).catch(e => {send_500(socket); console.error(e)})
         }
         if(is_obj(response)) return send_fast_json(socket, response)
         return send_fast_text(socket, response.toString())
       }
 
+
       // no handler exists for this route, try to serve this path as a file from the public folder
       if(public_folder) {
-        if(req.path[req.path.length-1] === '/') req.path += 'index.html'
+        if(req.path.charCodeAt(req.path.length-1) === 47/*/*/) req.path += 'index.html'
+        // if(req.path[req.path.length-1] === '/') req.path += 'index.html'
         return send_file(socket, `${public_folder}${req.path}`)
       }
 
+
+      // 404
       return send_404(socket)
     },
+
+    // todo: when we write too much data to a socket, we have to wait
+    // for this drain thing to be called then write more ... this is so annoying
+    // currently sending large data that would require multiple writes breaks
+    // until this is implemented
+    // drain() {},
 
     error(socket, error) { send_500(socket); console.error(error) },
 
@@ -58,36 +78,48 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
 
 // request context stuff
 // todo object pooling? making new requests for every request sounds slow
+// import querystring from 'fast-querystring'
 const querystring = require('node:querystring')
 class Request {
   get ip() { return this.headers?.['x-forwarded-for'] || this.socket.remoteAddress }
 
   get headers() {
     if(this._headers) return this._headers
-    this._headers = {}
+    const headers = {}
+
+    const raw_http_request = this.raw_http_request
+    const raw_http_len = raw_http_request.length
+
+    let start_of_headers = 0
+    for(let i=12; i<raw_http_len; i++) {
+      if(raw_http_request.charCodeAt(i) === 13/*\r*/ && raw_http_request.charCodeAt(i+1) === 10/*\n*/) {
+        start_of_headers = i + 2
+        break
+      }
+    }
 
     // todo maybe faster to search for indexOf rather than incrementing cursor?
-    let start_of_line = this.start_of_headers
+    let start_of_line = start_of_headers
     let cursor = start_of_line
     let colon_pos = -1
-    const len = this.raw_http_request.length
-    for(;cursor <= len;) {
-      if(this.raw_http_request[cursor] === '\r' && this.raw_http_request[cursor+1] === '\n') {
+    for(;cursor <= raw_http_len;) {
+      if(raw_http_request.charCodeAt(cursor) === 13/*\r*/ && raw_http_request.charCodeAt(cursor+1) === 10/*\n*/) {
         if(cursor === start_of_line) break
         let end_of_line = cursor
-        const header_name  = this.raw_http_request.slice(start_of_line, colon_pos)
-        const header_value = this.raw_http_request.slice(colon_pos+2, end_of_line)
-        this._headers[header_name] = header_value
+        const header_name  = raw_http_request.slice(start_of_line, colon_pos)
+        const header_value = raw_http_request.slice(colon_pos+2, end_of_line)
+        headers[header_name] = header_value
         cursor += 2
         start_of_line = cursor
         continue
-      } else if(this.raw_http_request[cursor] === ':' && this.raw_http_request[cursor+1] === ' ') colon_pos = cursor
+      } else if(raw_http_request.charCodeAt(cursor) === 58/*:*/ && raw_http_request.charCodeAt(cursor+1) === 32/* */) colon_pos = cursor
       cursor += 1
     }
 
     this.start_of_body = start_of_line+2
 
-    return this._headers
+    this._headers = headers
+    return headers
   }
 
   get body()  {
@@ -227,8 +259,6 @@ function send_file(socket, filepath) {
 
 
 // helpers
-function is_dev() {return process.env.NODE_ENV != 'production'}
-function log(...args) {if(!is_dev) return; console.log(...args)}
 function is_response(x) {return x instanceof UserResponse}
 function is_promise(x) {return x instanceof Promise}
 function is_obj(x) { return typeof x === 'object' } // faster as a function
@@ -309,4 +339,4 @@ function router_add(path, handler) {
 
 }
 
-function is_named_part(part) {return part[0] === ':'}
+function is_named_part(part) {return part.charCodeAt(0) === 58/*:*/}
