@@ -15,16 +15,15 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       // parse the first line of the http request
       // parsing a raw http request in javascript is very slow and dumb but i don't know a faster alternative
       const raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
-      const raw_http_len = raw_http_request.length
       req.raw_http_request = raw_http_request
 
       let first_space = 0
-      for(let i=0; i<raw_http_len; i++) {
+      for(let i=0; i<raw_http_request.length; i++) {
         if(raw_http_request.charCodeAt(i) === 32/* */) {first_space = i; break }
       }
 
       let second_space = 0
-      for(let i=first_space+2; i<raw_http_len; i++) {
+      for(let i=first_space+2; i<raw_http_request.length; i++) {
         if(raw_http_request.charCodeAt(i) === 32/* */) {second_space = i; break }
       }
 
@@ -38,11 +37,11 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
         // this is a wet mess because async/await and Promise.resolve is too slow
         const response = handler(req)
         if(!response) return send_200(socket)
-        if(is_response(response)) return send_userresponse(socket, response)
+        if(is_response(response)) return send(socket, response.content, response.options)
         if(is_promise(response)) {
           return response.then(response => {
               if(!response) return send_200(socket)
-              if(is_response(response)) return send_userresponse(socket, response)
+              if(is_response(response)) return send(socket, response.content, response.options)
               if(is_obj(response)) return send_fast_json(socket, response)
               return send_fast_text(socket, response.toString())
             }).catch(e => {send_500(socket); console.error(e)})
@@ -55,12 +54,9 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       // no handler exists for this route, try to serve this path as a file from the public folder
       if(public_folder) {
         if(req.path.charCodeAt(req.path.length-1) === 47/*/*/) req.path += 'index.html'
-        // if(req.path[req.path.length-1] === '/') req.path += 'index.html'
         return send_file(socket, `${public_folder}${req.path}`)
       }
 
-
-      // 404
       return send_404(socket)
     },
 
@@ -88,10 +84,9 @@ class Request {
     const headers = {}
 
     const raw_http_request = this.raw_http_request
-    const raw_http_len = raw_http_request.length
 
     let start_of_headers = 0
-    for(let i=12; i<raw_http_len; i++) {
+    for(let i=12; i<raw_http_request.length; i++) {
       if(raw_http_request.charCodeAt(i) === 13/*\r*/ && raw_http_request.charCodeAt(i+1) === 10/*\n*/) {
         start_of_headers = i + 2
         break
@@ -102,7 +97,7 @@ class Request {
     let start_of_line = start_of_headers
     let cursor = start_of_line
     let colon_pos = -1
-    for(;cursor <= raw_http_len;) {
+    for(;cursor <= raw_http_request.length;) {
       if(raw_http_request.charCodeAt(cursor) === 13/*\r*/ && raw_http_request.charCodeAt(cursor+1) === 10/*\n*/) {
         if(cursor === start_of_line) break
         let end_of_line = cursor
@@ -127,7 +122,7 @@ class Request {
     return this.raw_http_request.slice(this.start_of_body)
   }
 
-  get query() {return querystring.parse(this.rawquery) }
+  get query() {return querystring.parse(this.path.slice(this.rawquery_index)) }
 
 }
 function new_request() {return new Request()}
@@ -141,24 +136,13 @@ class UserResponse {
 
     if(typeof content === 'object') {
       this.content = JSON.stringify(content)
-      this.options.content_type = 'application/json'
+      if(this.options.headers === undefined) this.options.headers = {}
+      this.options.headers['Content-Type'] = 'application/json'
     } else {
       this.content = content || ''
     }
 
   }
-}
-function send_userresponse(socket, userresponse) {
-  let defined_count = 0
-  if(userresponse.options.headers !== undefined) defined_count += 1
-  if(userresponse.options.content_type !== undefined) defined_count += 1
-  if(userresponse.options.status !== undefined) defined_count += 1
-  if(defined_count === 1) {
-    if(userresponse.options.headers !== undefined) return send_fast_headers(socket, userresponse.content, userresponse.options.headers)
-    if(userresponse.options.content_type !== undefined) return send_fast_content_type(socket, userresponse.content, userresponse.options.content_type)
-    return send_fast_status(socket, userresponse.content, userresponse.options.status)
-  }
-  send(socket, userresponse.content, userresponse.options)
 }
 
 function send_200(socket) {socket.write('HTTP/1.1 200\r\nContent-Length: 0\r\n\r\n'); socket.flush()}
@@ -166,26 +150,6 @@ function send_400(socket) {socket.write('HTTP/1.1 400\r\nContent-Length: 0\r\n\r
 function send_404(socket) {socket.write('HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n'); socket.flush()}
 function send_500(socket) {socket.write('HTTP/1.1 500\r\nContent-Length: 0\r\n\r\n'); socket.flush()}
 
-// this is faster because it doesn't have arguments for status, headers, etc
-// just adding these variable makes it a lot slower ...
-// function send_fast(socket, content) {
-
-//   let content_type = 'text/plain'
-//   if(typeof content === 'object') {
-//     content_type = 'application/json'
-//     content = JSON.stringify(content)
-//   } else {
-//     if(!content) content = ''
-//   }
-
-//   const response = `HTTP/1.1 200\r\nContent-Length: ${content.length}\r\nContent-Type: ${content_type}\r\n\r\n${content}`
-//   socket.write(response); socket.flush()
-// }
-// function send_fast_json(socket, obj) {
-//   const content = Bun.gzipSync(JSON.stringify(obj))
-//   const response = `HTTP/1.1 200\r\nContent-Length: ${content.length}\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\n\r\n`
-//   socket.write(response); socket.write(content); socket.flush()
-// }
 function send_fast_json(socket, obj) {
   const content = JSON.stringify(obj)
   const response = `HTTP/1.1 200\r\nContent-Length: ${content.length}\r\nContent-Type: application/json\r\n\r\n${content}`
@@ -201,24 +165,18 @@ function send_fast_headers(socket, content, headers) {
   const response = `HTTP/1.1 200\r\nContent-Length: ${content.length}\r\n${headers_str}\r\n${content}`
   socket.write(response); socket.flush()
 }
-function send_fast_content_type(socket, content, content_type) {
-  const response = `HTTP/1.1 200\r\nContent-Length: ${content.length}\r\nContent-Type: ${content_type}\r\n\r\n${content}`
-  socket.write(response); socket.flush()
-}
 function send_fast_status(socket, content, status) {
   const response = `HTTP/1.1 ${status}\r\nContent-Length: ${content.length}\r\n\r\n${content}`
   socket.write(response); socket.flush()
 }
 
-function send(socket, content, {status=200, content_type='text/plain', headers}={}) {
+function send(socket, content, {status=200, headers}={}) {
 
   // headers obj to http response string
   let headers_str = ''
-  if(headers) {
-    for(const key in headers) headers_str += `${key}: ${headers[key]}\r\n`
-  }
+  if(headers) for(const key in headers) headers_str += `${key}: ${headers[key]}\r\n`
 
-  let response = `HTTP/1.1 ${status}\r\nContent-Length: ${content.length}\r\nContent-Type: ${content_type}\r\n${headers_str}\r\n${content}`
+  let response = `HTTP/1.1 ${status}\r\nContent-Length: ${content.length}\r\n${headers_str}\r\n${content}`
   socket.write(response); socket.flush()
 }
 
@@ -246,15 +204,14 @@ function send_file(socket, filepath) {
 
     const file = Bun.file(filepath)
     send(socket, file_content, {
-      content_type: file.type,
       headers: {
+        'Content-Type': file.type,
         'Referrer-Policy': 'no-referrer',
         'Cache-Control': 'public,max-age=604800,immutable',
       }
     })
   })
 }
-
 
 
 
@@ -272,7 +229,7 @@ export function post(path, handler) {router_add(path, handler)}
 const static_routes = new Map()
 const dynamic_routes = []
 function new_dyanmic_route(path, handler) {
-  const parts = path.split('/'); parts.shift()
+  const parts = path.slice(1).split('/')
   const info = []
   for(let i=0; i<parts.length; i++) {
     const part = parts[i]
@@ -290,16 +247,17 @@ function router_find(req) {
   if(handler) return handler
 
   // remove ? if it exists then search static routes again
-  const question_index = path.indexOf('?')
-  if(question_index !== -1) {
-    req.rawquery = path.slice(question_index+1)
-    path = path.slice(0, question_index)
-    const handler = static_routes.get(path)
-    if(handler) return handler
+  for(let i=0; i<path.length; i++) {
+    if(path.charCodeAt(i) === 63/*?*/) {
+      req.rawquery_index = i+1
+      path = path.slice(0, i)
+      const handler = static_routes.get(path)
+      if(handler) return handler
+    }
   }
 
   // search dynamic routes
-  const parts = path.split('/'); parts.shift()
+  const parts = path.slice(1).split('/')
   outer: for(let i=0; i<dynamic_routes.length; i++) {
     const route = dynamic_routes[i]
     if(route.parts.length !== parts.length) continue
@@ -319,24 +277,13 @@ function router_find(req) {
 function router_add(path, handler) {
   if(path[0] != '/') path = `/${path}` // ensure leading slash
 
-  const parts = path.split('/'); parts.shift()
+  const parts = path.slice(1).split('/')
   const contains_named_part = parts.some(is_named_part)
 
   if(!contains_named_part) return static_routes.set(path, handler)
 
   // it's a dynamic route
   dynamic_routes.push(new_dyanmic_route(path, handler))
-
-  // let static_parts = []
-  // for(let i=0; i<parts.length; i++) {
-  //   const part = parts[i]
-  //   if(!is_named_part(part)) {
-  //     static_parts.push(part)
-  //   } else {
-  //     // const static_parts.join('/')
-  //   }
-  // }
-
 }
 
 function is_named_part(part) {return part.charCodeAt(0) === 58/*:*/}
