@@ -15,15 +15,16 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       // parse the first line of the http request
       // parsing a raw http request in javascript is very slow and dumb but i don't know a faster alternative
       const raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
+      const raw_request_length = raw_http_request.length
       req.raw_http_request = raw_http_request
 
       let first_space = 0
-      for(let i=0; i<raw_http_request.length; i++) {
+      for(let i=0; i<raw_request_length; i++) {
         if(raw_http_request.charCodeAt(i) === 32/* */) {first_space = i; break }
       }
 
       let second_space = 0
-      for(let i=first_space+2; i<raw_http_request.length; i++) {
+      for(let i=first_space+2; i<raw_request_length; i++) {
         if(raw_http_request.charCodeAt(i) === 32/* */) {second_space = i; break }
       }
 
@@ -84,9 +85,11 @@ class Request {
     const headers = {}
 
     const raw_http_request = this.raw_http_request
-
+    
+    const raw_request_length = raw_http_request.length
+    
     let start_of_headers = 0
-    for(let i=12; i<raw_http_request.length; i++) {
+    for(let i=12; i<raw_request_length; i++) {
       if(raw_http_request.charCodeAt(i) === 13/*\r*/ && raw_http_request.charCodeAt(i+1) === 10/*\n*/) {
         start_of_headers = i + 2
         break
@@ -97,7 +100,7 @@ class Request {
     let start_of_line = start_of_headers
     let cursor = start_of_line
     let colon_pos = -1
-    for(;cursor <= raw_http_request.length;) {
+    for(;cursor <= raw_request_length;) {
       if(raw_http_request.charCodeAt(cursor) === 13/*\r*/ && raw_http_request.charCodeAt(cursor+1) === 10/*\n*/) {
         if(cursor === start_of_line) break
         let end_of_line = cursor
