@@ -1,4 +1,3 @@
-
 // start the server listening on a port
 export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}={}) {
   return Bun.listen({hostname, port, socket: {
@@ -13,7 +12,7 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
 
 
       // parse the first line of the http request
-      // parsing a raw http request in javascript is very slow and dumb but i don't know a faster alternative
+      // parsing a raw http request in javascript is very slow and dumb but i can't find a faster alternative
       const raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
       req.raw_http_request = raw_http_request
 
@@ -36,27 +35,29 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       if(handler) {
         // this is a wet mess because async/await and Promise.resolve is too slow
         const response = handler(req)
-        if(!response) return send_200(socket)
-        if(is_response(response)) return send(socket, response.content, response.options)
-        if(is_promise(response)) {
+        if(!response)                        return send_200(socket)
+        if(is_response(response))            return send(socket, response.content, response.options)
+        if(is_promise(response))
           return response.then(response => {
-              if(!response) return send_200(socket)
-              if(is_response(response)) return send(socket, response.content, response.options)
-              if(is_obj(response)) return send_fast_json(socket, response)
-              return send_fast_text(socket, response.toString())
-            }).catch(e => {send_500(socket); console.error(e)})
-        }
-        if(is_obj(response)) return send_fast_json(socket, response)
-        return send_fast_text(socket, response.toString())
+            if(!response)                    return send_200(socket)
+            if(is_response(response))        return send(socket, response.content, response.options)
+            if(is_obj(response))             return send_fast_json(socket, response)
+                                             return send_fast_text(socket, response.toString())
+          }).catch(e => {console.error(e);   return send_500(socket)})
+        if(is_obj(response))                 return send_fast_json(socket, response)
+                                             return send_fast_text(socket, response.toString())
       }
-
 
       // no handler exists for this route, try to serve this path as a file from the public folder
       if(public_folder) {
         if(req.path.charCodeAt(req.path.length-1) === 47/*/*/) req.path += 'index.html'
+        // @perf could check if the file exists using a bloom filter first to 10x the performance of 404s
+        // (i've already implemented and benched this, but left it out because meh, it's a lot of code)
         return send_file(socket, `${public_folder}${req.path}`)
       }
 
+      // i'd prefer to respond with Cannot GET / but meh, that creates garbage
+      // return send(socket, `Cannot ${req.method} ${req.path}`, {status: 404})
       return send_404(socket)
     },
 
@@ -93,7 +94,6 @@ class Request {
       }
     }
 
-    // todo maybe faster to search for indexOf rather than incrementing cursor?
     let start_of_line = start_of_headers
     let cursor = start_of_line
     let colon_pos = -1
@@ -180,24 +180,8 @@ function send(socket, content, {status=200, headers}={}) {
   socket.write(response); socket.flush()
 }
 
-// // send_file is slow. bun does not support quick sendfile... yet? (v1.0)
-// async function send_file(socket, filepath) {
-//   try {
-//     const file = Bun.file(filepath)
-//     const file_content = await file.text()
-
-//     send(socket, file_content, {
-//       content_type: file.type,
-//       headers: {
-//         'Referrer-Policy': 'no-referrer',
-//         'Cache-Control': 'public,max-age=604800,immutable',
-//       }
-//     })
-//   } catch(e) {send_404(socket)}
-// }
-
+// send_file is slow. bun does not support quick sendfile... yet? (v1.0)
 // using fs instead of Bun.file because Bun.file doesn't work https://github.com/oven-sh/bun/issues/1446
-import fs from 'fs'
 function send_file(socket, filepath) {
   fs.readFile(filepath, (err, file_content) => {
     if(err) return send_404(socket)
@@ -216,9 +200,9 @@ function send_file(socket, filepath) {
 
 
 // helpers
-function is_response(x) {return x instanceof UserResponse}
-function is_promise(x) {return x instanceof Promise}
-function is_obj(x) { return typeof x === 'object' } // faster as a function
+function is_response(x) { return x instanceof UserResponse }
+function is_promise(x)  { return x instanceof Promise }
+function is_obj(x)      { return typeof x === 'object' }
 
 
 // router stuff
@@ -268,9 +252,7 @@ function router_find(req) {
     // found a matching route
     // set the request's params then return its handler
     req.params = {}
-    for(const info of route.info) {
-      req.params[info.name] = parts[info.index]
-    }
+    for(const info of route.info) req.params[info.name] = parts[info.index]
     return route.handler
   }
 }
