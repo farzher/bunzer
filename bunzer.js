@@ -64,7 +64,7 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
     // todo: when we write too much data to a socket, we have to wait
     // for this drain thing to be called then write more ... this is so annoying
     // currently sending large data that would require multiple writes breaks
-    // until this is implemented
+    // until this is implemented. this is a part of uws, the http server bun uses internally
     // drain() {},
 
     error(socket, error) { send_500(socket); console.error(error) },
@@ -75,10 +75,11 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
 
 // request context stuff
 // todo object pooling? making new requests for every request sounds slow
+// fast-querystring is faster than node:querystring but i'd rather not have a dependency
 // import querystring from 'fast-querystring'
 const querystring = require('node:querystring')
 class Request {
-  get ip() { return this.headers?.['x-forwarded-for'] || this.socket.remoteAddress }
+  get ip() { return this.socket.remoteAddress }
 
   get headers() {
     if(this._headers) return this._headers
@@ -182,6 +183,7 @@ function send(socket, content, {status=200, headers}={}) {
 
 // send_file is slow. bun does not support quick sendfile... yet? (v1.0)
 // using fs instead of Bun.file because Bun.file doesn't work https://github.com/oven-sh/bun/issues/1446
+import fs from 'fs'
 function send_file(socket, filepath) {
   fs.readFile(filepath, (err, file_content) => {
     if(err) return send_404(socket)
@@ -206,12 +208,28 @@ function is_obj(x)      { return typeof x === 'object' }
 
 
 // router stuff
-export function any(path, handler)  {router_add(path, handler)}
-export function get(path, handler)  {router_add(path, handler)}
-export function post(path, handler) {router_add(path, handler)}
+// custom methods aren't supported because i've never used them
+export function any(path, handler)  {router_add(0, path, handler)}
+export function get(path, handler)  {router_add(1, path, handler)}
+export function post(path, handler) {router_add(2, path, handler)}
+export function put(path, handler)  {router_add(3, path, handler)}
+export function del(path, handler)  {router_add(4, path, handler)}
 
-const static_routes = new Map()
-const dynamic_routes = []
+function method_to_method_id(method) {
+  if(method.charCodeAt(1) === 85/*U*/) return 3
+  switch(method.charCodeAt(0)) {
+    case 71/*G*/: return 1
+    case 80/*P*/: return 2
+    case 68/*D*/: return 4
+    default:      return 0
+  }
+}
+
+const static_routes_by_method = [new Map(), new Map(), new Map(), new Map(), new Map()]
+const static_routes = static_routes_by_method[0]
+const dynamic_routes_by_method = [[], [], [], [], []]
+const dynamic_routes = dynamic_routes_by_method[0]
+
 function new_dyanmic_route(path, handler) {
   const parts = path.slice(1).split('/')
   const info = []
@@ -223,11 +241,32 @@ function new_dyanmic_route(path, handler) {
   return {parts, handler, info}
 }
 
+function router_add(method_id, path, handler) {
+  if(path[0] != '/') path = `/${path}` // ensure leading slash
+
+  const parts = path.slice(1).split('/')
+  const contains_named_part = parts.some(is_named_part)
+
+  if(!contains_named_part) {
+    static_routes.set(path, handler)
+    if(method_id) static_routes_by_method[method_id].set(path, handler)
+    return
+  }
+
+  // it's a dynamic route
+  const dynamic_route_info = new_dyanmic_route(path, handler)
+  dynamic_routes.push(dynamic_route_info)
+  if(method_id) dynamic_routes_by_method[method_id].push(dynamic_route_info)
+}
+
+
 function router_find(req) {
   let path = req.path
+  let method_id = method_to_method_id(req.method)
 
   // search static routes
-  const handler = static_routes.get(path)
+  const the_static_routes = static_routes_by_method[method_id]
+  const handler = the_static_routes.get(path)
   if(handler) return handler
 
   // remove ? if it exists then search static routes again
@@ -235,15 +274,16 @@ function router_find(req) {
     if(path.charCodeAt(i) === 63/*?*/) {
       req.rawquery_index = i+1
       path = path.slice(0, i)
-      const handler = static_routes.get(path)
+      const handler = the_static_routes.get(path)
       if(handler) return handler
     }
   }
 
   // search dynamic routes
   const parts = path.slice(1).split('/')
-  outer: for(let i=0; i<dynamic_routes.length; i++) {
-    const route = dynamic_routes[i]
+  const the_dyanmic_routes = dynamic_routes_by_method[method_id]
+  outer: for(let i=0; i<the_dyanmic_routes.length; i++) {
+    const route = the_dyanmic_routes[i]
     if(route.parts.length !== parts.length) continue
     for(let i=0; i<parts.length; i++) {
       if(is_named_part(route.parts[i])) continue
@@ -256,16 +296,10 @@ function router_find(req) {
     return route.handler
   }
 }
-function router_add(path, handler) {
-  if(path[0] != '/') path = `/${path}` // ensure leading slash
 
-  const parts = path.slice(1).split('/')
-  const contains_named_part = parts.some(is_named_part)
-
-  if(!contains_named_part) return static_routes.set(path, handler)
-
-  // it's a dynamic route
-  dynamic_routes.push(new_dyanmic_route(path, handler))
-}
 
 function is_named_part(part) {return part.charCodeAt(0) === 58/*:*/}
+
+
+
+
