@@ -16,15 +16,8 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
       const raw_http_request = data.toString('ascii') // ascii seems faster than utf-8
       req.raw_http_request = raw_http_request
 
-      let first_space = 0
-      for(let i=0; i<raw_http_request.length; i++) {
-        if(raw_http_request.charCodeAt(i) === 32/* */) {first_space = i; break }
-      }
-
-      let second_space = 0
-      for(let i=first_space+2; i<raw_http_request.length; i++) {
-        if(raw_http_request.charCodeAt(i) === 32/* */) {second_space = i; break }
-      }
+      const first_space  = raw_http_request.indexOf(' ')
+      const second_space = raw_http_request.indexOf(' ', first_space+2)
 
       req.method = raw_http_request.slice(0, first_space)
       req.path = raw_http_request.slice(first_space+1, second_space)
@@ -50,7 +43,7 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
 
       // no handler exists for this route, try to serve this path as a file from the public folder
       if(public_folder) {
-        if(req.path.charCodeAt(req.path.length-1) === 47/*/*/) req.path += 'index.html'
+        if(req.path[req.path.length-1] === '/') req.path += 'index.html'
         // @perf could check if the file exists using a bloom filter first to 10x the performance of 404s
         // (i've already implemented and benched this, but left it out because meh, it's a lot of code)
         return send_file(socket, `${public_folder}${req.path}`)
@@ -72,7 +65,6 @@ export function serve({hostname='127.0.0.1', port=8080, public_folder=undefined}
   }})
 }
 
-
 // request context stuff
 // todo object pooling? making new requests for every request sounds slow
 // fast-querystring is faster than node:querystring but i'd rather not have a dependency
@@ -82,48 +74,35 @@ class Request {
   get ip() { return this.socket.remoteAddress }
 
   get headers() {
-    if(this._headers) return this._headers
     const headers = {}
 
     const raw_http_request = this.raw_http_request
-
-    let start_of_headers = 0
-    for(let i=12; i<raw_http_request.length; i++) {
-      if(raw_http_request.charCodeAt(i) === 13/*\r*/ && raw_http_request.charCodeAt(i+1) === 10/*\n*/) {
-        start_of_headers = i + 2
-        break
-      }
-    }
-
+    const start_of_headers = raw_http_request.indexOf('\r', 12) + 2
     let start_of_line = start_of_headers
-    let cursor = start_of_line
-    let colon_pos = -1
-    for(;cursor <= raw_http_request.length;) {
-      if(raw_http_request.charCodeAt(cursor) === 13/*\r*/ && raw_http_request.charCodeAt(cursor+1) === 10/*\n*/) {
-        if(cursor === start_of_line) break
-        let end_of_line = cursor
-        const header_name  = raw_http_request.slice(start_of_line, colon_pos)
-        const header_value = raw_http_request.slice(colon_pos+2, end_of_line)
-        headers[header_name] = header_value
-        cursor += 2
-        start_of_line = cursor
-        continue
-      } else if(raw_http_request.charCodeAt(cursor) === 58/*:*/ && raw_http_request.charCodeAt(cursor+1) === 32/* */) colon_pos = cursor
-      cursor += 1
+
+    while(start_of_line < raw_http_request.length) {
+      const end_of_line = raw_http_request.indexOf('\r', start_of_line)
+      if(end_of_line === start_of_line || end_of_line === -1) break // double newline is the end of headers
+
+      const colon_pos = raw_http_request.lastIndexOf(':', end_of_line)
+      const header_name  = raw_http_request.slice(start_of_line, colon_pos)
+      const header_value = raw_http_request.slice(colon_pos+2, end_of_line)
+      headers[header_name] = header_value
+
+      start_of_line = end_of_line + 2
     }
 
     this.start_of_body = start_of_line+2
 
-    this._headers = headers
     return headers
   }
 
-  get body()  {
-    this.headers // ensure headers are parsed before we can get the body
+  get body() {
+    if(!this.start_of_body) this.start_of_body = this.raw_http_request.indexOf('\r\n\r\n', 12)+4
     return this.raw_http_request.slice(this.start_of_body)
   }
 
-  get query() {return querystring.parse(this.path.slice(this.rawquery_index)) }
+  get query() { return querystring.parse(this.path.slice(this.rawquery_index)) }
 
 }
 function new_request() {return new Request()}
@@ -216,11 +195,14 @@ export function put(path, handler)  {router_add(3, path, handler)}
 export function del(path, handler)  {router_add(4, path, handler)}
 
 function method_to_method_id(method) {
-  if(method.charCodeAt(1) === 85/*U*/) return 3
-  switch(method.charCodeAt(0)) {
-    case 71/*G*/: return 1
-    case 80/*P*/: return 2
-    case 68/*D*/: return 4
+  // fastpath for GET because it's most common
+  // (not all methods can be distinguished from a single character switch)
+  if(method.charCodeAt(0) === 71/*G*/) return 1
+
+  switch(method.charCodeAt(1)) {
+    case 79/*O*/: return 2
+    case 85/*U*/: return 3
+    case 69/*E*/: return 4
     default:      return 0
   }
 }
@@ -270,13 +252,12 @@ function router_find(req) {
   if(handler) return handler
 
   // remove ? if it exists then search static routes again
-  for(let i=0; i<path.length; i++) {
-    if(path.charCodeAt(i) === 63/*?*/) {
-      req.rawquery_index = i+1
-      path = path.slice(0, i)
-      const handler = the_static_routes.get(path)
-      if(handler) return handler
-    }
+  const questionmark_i = path.indexOf('?')
+  if(questionmark_i !== -1) {
+    req.rawquery_index = questionmark_i+1
+    path = path.slice(0, questionmark_i)
+    const handler = the_static_routes.get(path)
+    if(handler) return handler
   }
 
   // search dynamic routes
