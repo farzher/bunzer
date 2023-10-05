@@ -18,6 +18,7 @@ declare interface BunzerRequest {
     path: string;
     rawquery?: string;
     params?: Record<string, string>;
+    rawquery_index?: number;
     readonly ip: string;
     readonly headers: Record<string, any>;
     readonly body: string;
