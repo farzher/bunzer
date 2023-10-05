@@ -1,5 +1,3 @@
-import { TCPSocket } from "bun";
-
 type handlerResponse = UserResponse | object | string;
 
 export function serve(options: { hostname?: string, port?: number, public_folder?: string })/*: ReturnType<Bun['listen']> */
@@ -10,23 +8,23 @@ export function post(path: string, handler: (req: BunzerRequest) => Promise<hand
 export function put(path: string, handler: (req: BunzerRequest) => Promise<handlerResponse> | handlerResponse): void
 export function del(path: string, handler: (req: BunzerRequest) => Promise<handlerResponse> | handlerResponse): void
 
-declare interface BunzerRequest {
-    socket: TCPSocket;
+declare class BunzerRequest {
     raw_http_request: string;
-    start_of_headers: number;
     method: string;
     path: string;
-    rawquery?: string;
     params?: Record<string, string>;
     rawquery_index?: number;
-    readonly ip: string;
-    readonly headers: Record<string, any>;
-    readonly body: string;
-    readonly query: Record<string, string | string[] | undefined>;
+    start_of_body?: number;
+    private socket: any/* import('bun')['TCPSocket'] */;
+    private _headers?: this['headers'];
+    get ip(): string;
+    get headers(): Record<string, any>;
+    get body(): string;
+    get query(): Record<string, string | string[] | undefined>;
 }
 
 declare class UserResponse {
-    constructor(content: string | object, options: ResponseInit)
-    options: ResponseInit
+    constructor(content: string | object, options: Omit<ResponseInit, 'statusText'>)
+    options: Omit<ResponseInit, 'statusText'>
     content: string
 }
