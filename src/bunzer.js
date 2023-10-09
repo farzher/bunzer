@@ -98,7 +98,7 @@ export function serve({
 // todo object pooling? making new requests for every request sounds slow
 // fast-querystring is faster than node:querystring but i'd rather not have a dependency
 // import querystring from 'fast-querystring'
-const querystring = require("node:querystring");
+// const querystring = require("node:querystring");
 class Request {
   get ip() {
     return this.socket.remoteAddress;
