@@ -13,6 +13,10 @@ const { symbols } = dlopen(pathname, {
         args: [FFIType.ptr],
         returns: FFIType.void,
     },
+    getKey: {
+        args: [FFIType.ptr, FFIType.ptr],
+        returns: FFIType.ptr,
+    }
 });
 
 export { symbols }
