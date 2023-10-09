@@ -1,4 +1,4 @@
-import { parsec } from "./lib";
+import { querystring } from "./lib";
 
 // start the server listening on a port
 export function serve({
@@ -124,7 +124,7 @@ class Request {
     let start_of_line = start_of_headers;
     let cursor = start_of_line;
     let colon_pos = -1;
-    for (; cursor <= raw_http_request.length;) {
+    for (; cursor <= raw_http_request.length; ) {
       if (
         raw_http_request.charCodeAt(cursor) === 13 /*\r*/ &&
         raw_http_request.charCodeAt(cursor + 1) === 10 /*\n*/
@@ -166,7 +166,7 @@ class Request {
     // console.log(querystring.parse(this.path.slice(this.rawquery_index)));
     // console.timeLog('process')
 
-    return parsec(this.path.slice(this.rawquery_index))
+    return querystring(this.path.slice(this.rawquery_index));
   }
 }
 function new_request() {
