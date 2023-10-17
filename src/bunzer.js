@@ -124,7 +124,7 @@ class Request {
     let start_of_line = start_of_headers;
     let cursor = start_of_line;
     let colon_pos = -1;
-    for (; cursor <= raw_http_request.length; ) {
+    for (; cursor <= raw_http_request.length;) {
       if (
         raw_http_request.charCodeAt(cursor) === 13 /*\r*/ &&
         raw_http_request.charCodeAt(cursor + 1) === 10 /*\n*/
@@ -245,20 +245,19 @@ function send(socket, content, { status = 200, headers } = {}) {
 
 // send_file is slow. bun does not support quick sendfile... yet? (v1.0)
 // using fs instead of Bun.file because Bun.file doesn't work https://github.com/oven-sh/bun/issues/1446
-import fs from "fs";
-function send_file(socket, filepath) {
-  fs.readFile(filepath, (err, file_content) => {
-    if (err) return send_404(socket);
+import { FS } from "@bunland/fs";
+const fs = new FS();
 
-    const file = Bun.file(filepath);
-    send(socket, file_content, {
+async function send_file(socket, filepath) {
+  if (await fs.exists(filepath)) {
+    send(socket, await fs.readFile(filepath), {
       headers: {
-        "Content-Type": file.type,
+        "Content-Type": Bun.file(filepath).type,
         "Referrer-Policy": "no-referrer",
         "Cache-Control": "public,max-age=604800,immutable",
       },
     });
-  });
+  }
 }
 
 // helpers
