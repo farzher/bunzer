@@ -10,7 +10,7 @@ get('/ip', req => req.ip)
 get('/query', req => req.query) // /query?limit=10
 get('/error', req => null.ptr)
 get('/async', async req => (await fetch('https://example.com')).text())
-patch("/some", req => { hello: 'world' }) // use req.body;
+patch("/some", req => ({ hello: 'world' })) // use req.body;
 
 post('/body', req => {
   const { username, message } = JSON.parse(req.body)
