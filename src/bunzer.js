@@ -288,9 +288,14 @@ export function put(path, handler) {
 export function del(path, handler) {
   router_add(4, path, handler);
 }
+export function patch(patch, handler) {
+  router_add(5, patch, handler);
+}
+
 
 function method_to_method_id(method) {
   if (method.charCodeAt(1) === 85 /*U*/) return 3;
+  if (method.charCodeAt(1) === 65 /*PATCH*/) return 5;
   switch (method.charCodeAt(0)) {
     case 71 /*G*/:
       return 1;
@@ -309,9 +314,11 @@ const static_routes_by_method = [
   new Map(),
   new Map(),
   new Map(),
+  new Map(),
 ];
+
 const static_routes = static_routes_by_method[0];
-const dynamic_routes_by_method = [[], [], [], [], []];
+const dynamic_routes_by_method = [[], [], [], [], [], []];
 const dynamic_routes = dynamic_routes_by_method[0];
 
 function new_dyanmic_route(path, handler) {
@@ -326,6 +333,7 @@ function new_dyanmic_route(path, handler) {
 }
 
 function router_add(method_id, path, handler) {
+
   if (path[0] != "/") path = `/${path}`; // ensure leading slash
 
   const parts = path.slice(1).split("/");
