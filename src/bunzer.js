@@ -1,4 +1,32 @@
 import { querystring } from "./lib";
+import chalk from "chalk";
+
+export async function LauriStart(ip, port) {
+  if(typeof ip !== "string") throw new Error("ip must be a string")
+  if(typeof port !== "number") throw new Error("port must be a number")
+  console.log(`
+${chalk.red.bold(` 
+     +-.                   :#*==+#@@@@@.          |                         ${chalk.blue.bold("Lauri v0.1")}
+     -@@@@@#:         .  -%@@@@@@@@@@@@+          |                     ${chalk.green.bold(`http://${ip}:${port}`)}
+       -%@@@@@#*=     .+%@@@@@@@@@@@@@@@@*-       | 
+         -*@@@@@@#:    %@@@@@@@@@@@@@@%=:...      | 
+           .*@@@@@@=  -@@@@@@@@@@@@@@@@=          | 
+    +.       -%@@@@@#:%@@@@@@@@@@@@#+---:         | 
+ - -%.:.       #@@@@@@@@@@@@@@@@#-                | 
+ #*@@@@@@#=--==%@@@@@@@@@@@@@@@+                  |                       ${chalk.yellow.bold("@Bunland/Lauri")}
+ #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.            .     | 
+ #@@@@@#+@@@@@@@@@@@@@@@@@@@@@@           .=#     | 
+ .@@@@%. :#@@@@@@@@@@@@@@@@@@@*       .-+@@+.     | 
+   *@@+     =@@@@@@@@@@@@@@@@@%+.    :%*.         | 
+   =@%#.     :@@@@@@@@@@@@@@@@@@%=   =@           | 
+    ..     -#@@@@@@@@@@@@@@@@@@@@%*. =@:          | 
+        -#%%%+:  .%@@@@@@@@@@@@@@@@@+:%@+:        | 
+     :*%%+  :    :@@@+@@++%@@@@@@@@@@@#@@@@%*+=-  | 
+       +=        %@@-=@@+  @@%@@@@@@@@@@@@@@@@@@@ |
+                #@@%@%*-. #@@= -+%@@@@@@@@@@@@@#= |  
+             -=*@#*=- .=+@@@-      ..:------:.    |`)}
+`)
+}
 
 // start the server listening on a port
 export function serve({
