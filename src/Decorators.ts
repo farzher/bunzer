@@ -1,6 +1,5 @@
 import "reflect-metadata";
 import { TCPSocket } from "bun";
-import { getIP } from "./ip.ts";
 
 type ServiceMetaData = {
     absolutePath: string
@@ -127,6 +126,22 @@ export function Req(target: Object, propertyKey: string, parameterIndex: number)
     Reflect.defineMetadata(`${propertyKey}:params`, md, target.constructor.prototype)
 }
 
+// Nota: El index solo puede ser ejecutado desde la carpeta donde se accede a todas las carpetas de los servicios
+function splitPath(path: string): string {
+    let path_array = path.split("/")
+    let cwd_array = process.cwd().split("/")
+    let final = ""
+    for (let i = 0; i < cwd_array.length; i++) {
+        if(cwd_array[i] !== path_array[i] && n === 0){
+            n++;
+            final += `./${path_array[i]}`
+        } else if(cwd_array[i] !== path_array[i] && n !== 0){
+            final += `/${path_array[i]}`
+        }
+    }
+    return final
+}
+
 interface CreateBackendOptions {
     hostname?: string
     port?: number
@@ -194,11 +209,11 @@ export function CreateBackend(ClassArray: Array<Function>, options?: CreateBacke
                 return route + `"`;
             }
             routes_obj += `${mgp.route.slice(1)}:{ fn: ${mgp.route.slice(1)}.prototype.${mgp.route.slice(1)} },`
-            imports += `const ${mgp.route.slice(1)} = (await import("${date_service.absolutePath}")).default;\n`
+            imports += `const ${mgp.route.slice(1)} = (await import("${splitPath(date_service.absolutePath)}")).default;\n`
             text  = text + `\n${mgp.type}(${RouteString()}, ${mgp.async ? "async(req: any)" : "(req: any)"} => {\n${ParamsString()}\n})`
         }
     }
-    text = `LauriStart("${options?.hostname ?? getIP()}", ${options?.port ?? 3000});\n` +imports.slice(0, -1) + "\n" + routes_obj.slice(0, -1) + " }\n" + text + `\n\n//@ts-ignore\nserve({ hostname: "${options?.hostname ?? getIP()}", port: ${options?.port ?? 3000}, public_folder: "${options?.public_folder ?? "public"}" })`
+    text = `LauriStart("${options?.hostname ?? "localhost"}", ${options?.port ?? 3000});\n` +imports.slice(0, -1) + "\n" + routes_obj.slice(0, -1) + " }\n" + text + `\n\n//@ts-ignore\nserve({ hostname: "${options?.hostname ?? "localhost"}", port: ${options?.port ?? 3000}, public_folder: "${options?.public_folder ?? "public"}" })`
     console.log(text)
     console.timeEnd()
 }
