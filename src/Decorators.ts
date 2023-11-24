@@ -126,22 +126,6 @@ export function Req(target: Object, propertyKey: string, parameterIndex: number)
     Reflect.defineMetadata(`${propertyKey}:params`, md, target.constructor.prototype)
 }
 
-// Nota: El index solo puede ser ejecutado desde la carpeta donde se accede a todas las carpetas de los servicios
-function splitPath(path: string): string {
-    let path_array = path.split("/")
-    let cwd_array = process.cwd().split("/")
-    let final = ""
-    for (let i = 0; i < cwd_array.length; i++) {
-        if(cwd_array[i] !== path_array[i] && n === 0){
-            n++;
-            final += `./${path_array[i]}`
-        } else if(cwd_array[i] !== path_array[i] && n !== 0){
-            final += `/${path_array[i]}`
-        }
-    }
-    return final
-}
-
 interface CreateBackendOptions {
     hostname?: string
     port?: number
@@ -209,7 +193,7 @@ export function CreateBackend(ClassArray: Array<Function>, options?: CreateBacke
                 return route + `"`;
             }
             routes_obj += `${mgp.route.slice(1)}:{ fn: ${mgp.route.slice(1)}.prototype.${mgp.route.slice(1)} },`
-            imports += `const ${mgp.route.slice(1)} = (await import("${splitPath(date_service.absolutePath)}")).default;\n`
+            imports += `const ${mgp.route.slice(1)} = (await import("${date_service.absolutePath}")).default;\n`
             text  = text + `\n${mgp.type}(${RouteString()}, ${mgp.async ? "async(req: any)" : "(req: any)"} => {\n${ParamsString()}\n})`
         }
     }
