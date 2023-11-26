@@ -1,5 +1,8 @@
 import "reflect-metadata";
 import { TCPSocket } from "bun";
+import { FS } from "@bunland/fs";
+
+const fs = new FS()
 
 type ServiceMetaData = {
     absolutePath: string
@@ -136,7 +139,7 @@ let routes_obj: string = "const routes_obj = {"
 let text: string = "import {get, post, patch, serve, LauriStart} from \"@bunland/lauri\""
 let imports: string = ""
 let n: number = 0
-export function CreateBackend(ClassArray: Array<Function>, options?: CreateBackendOptions): void {
+export async function CreateBackend(ClassArray: Array<Function>, options?: CreateBackendOptions): Promise<void> {
     console.time()
     for (let Clase of ClassArray) {
         const date_routes = Object.getOwnPropertyNames(Clase.prototype).filter(mn => Reflect.has(Clase.prototype, mn)).filter(x => String(x) !== "constructor")
@@ -198,6 +201,6 @@ export function CreateBackend(ClassArray: Array<Function>, options?: CreateBacke
         }
     }
     text = `LauriStart("${options?.hostname ?? "localhost"}", ${options?.port ?? 3000});\n` +imports.slice(0, -1) + "\n" + routes_obj.slice(0, -1) + " }\n" + text + `\n\n//@ts-ignore\nserve({ hostname: "${options?.hostname ?? "localhost"}", port: ${options?.port ?? 3000}, public_folder: "${options?.public_folder ?? "public"}" })`
-    console.log(text)
+    await fs.writeFile("./build.ts", text)
     console.timeEnd()
 }
