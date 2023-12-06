@@ -220,7 +220,6 @@ export async function CreateBackend(ClassArray: Array<Function>, options?: Creat
         }
     }
     text = `LauriStart("${options?.hostname ?? "localhost"}", ${options?.port ?? 3000});\n` +imports.slice(0, -1) + "\n" + routes_obj.slice(0, -1) + " }\n" + text + `\n\n//@ts-ignore\nserve({ hostname: "${options?.hostname ?? "localhost"}", port: ${options?.port ?? 3000}, public_folder: "${options?.public_folder ?? "public"}" })`
-    console.log(text)
     await fs.writeFile("./build.ts", text)
     console.timeEnd()
 }
