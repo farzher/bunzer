@@ -13,16 +13,16 @@ type ServiceMetaData = {
 }
 
 type OptionsService = {
-    path: string
     semantic?: boolean
     initRouteWithServiceName?: boolean
 }
 
-export function Service(options: OptionsService) {
+export function Service(options?: OptionsService) {
     return function(target: Function){
         const semantic_value = options?.semantic ?? true
         const initRoute_value = options?.initRouteWithServiceName ?? true
-        Reflect.defineMetadata("service", { semantic: semantic_value, initRouteWithServiceName: initRoute_value, fakeName: target.name.charAt(0).toLowerCase() + target.name.slice(1), originalName: target.name, absolutePath: options.path }, target.prototype)
+        const fileName = new Error().stack?.split('\n')[4].trim().match(/\((.*):\d+:\d+\)/)?.[1]
+        Reflect.defineMetadata("service", { semantic: semantic_value, initRouteWithServiceName: initRoute_value, fakeName: target.name.charAt(0).toLowerCase() + target.name.slice(1), originalName: target.name, absolutePath: fileName as string }, target.prototype)
     }
 }
 
@@ -38,25 +38,44 @@ export interface Request {
 }
 
 type RouteMetaData = {
-    type: "get" | "post" | "patch"
+    type: "get" | "post" | "patch" | "put" | "del" | "any"
     route: string
     async: boolean
+    nameService: string
 }
 
 export function Get() {
     return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
-        Reflect.defineMetadata(propertyKey, { type: "get", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async") }, target.constructor.prototype)
+        Reflect.defineMetadata(propertyKey, { type: "get", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
     }
 }
 export function Post(){
     return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
-        Reflect.defineMetadata(propertyKey, { type: "post", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async") }, target.constructor.prototype)
+        Reflect.defineMetadata(propertyKey, { type: "post", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
     }
 }
 
 export function Patch(){
     return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
-        Reflect.defineMetadata(propertyKey, { type: "patch", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async") }, target.constructor.prototype)
+        Reflect.defineMetadata(propertyKey, { type: "patch", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
+    }
+}
+
+export function Put(){
+    return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
+        Reflect.defineMetadata(propertyKey, { type: "put", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
+    }
+}
+
+export function Delete(){
+    return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
+        Reflect.defineMetadata(propertyKey, { type: "del", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
+    }
+}
+
+export function Any(){
+    return function(target: Object, propertyKey: string, descriptor: PropertyDescriptor): void {
+        Reflect.defineMetadata(propertyKey, { type: "any", route: "/" + propertyKey, async: descriptor.value.toString().startsWith("async"), nameService: target.constructor.name }, target.constructor.prototype)
     }
 }
 
@@ -136,8 +155,8 @@ interface CreateBackendOptions {
 }
 
 let routes_obj: string = "const routes_obj = {"
-let text: string = "import {get, post, patch, serve, LauriStart} from \"@bunland/lauri\""
-let imports: string = ""
+let text: string = "import {get, post, patch, put, del, any, serve, LauriStart} from \"@bunland/lauri\""
+let imports = ""
 let n: number = 0
 export async function CreateBackend(ClassArray: Array<Function>, options?: CreateBackendOptions): Promise<void> {
     console.time()
@@ -201,6 +220,7 @@ export async function CreateBackend(ClassArray: Array<Function>, options?: Creat
         }
     }
     text = `LauriStart("${options?.hostname ?? "localhost"}", ${options?.port ?? 3000});\n` +imports.slice(0, -1) + "\n" + routes_obj.slice(0, -1) + " }\n" + text + `\n\n//@ts-ignore\nserve({ hostname: "${options?.hostname ?? "localhost"}", port: ${options?.port ?? 3000}, public_folder: "${options?.public_folder ?? "public"}" })`
+    console.log(text)
     await fs.writeFile("./build.ts", text)
     console.timeEnd()
 }
